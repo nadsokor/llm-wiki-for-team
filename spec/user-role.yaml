@@ -1,0 +1,85 @@
+role: user
+objective: >
+  Deploy a private User Wiki vault and a personal ingest agent that reads shared
+  sources plus the shared public wiki and writes only private knowledge artifacts.
+
+vaults:
+  shared_vault_mount:
+    name: Team Sources
+    class: shared_read_source
+    access_pattern: human_browse_and_agent_read_only
+  private_vault:
+    name: User Wiki
+    class: personal
+    required_folders:
+      - 01_system/indexes
+      - 01_system/prompts
+      - 01_system/templates
+      - 20_wiki
+      - 30_outputs
+      - 40_workspace
+      - .agent
+      - .agent/source-cache
+      - .agent/embeddings
+    state_files:
+      - .agent/ingest-state.json
+
+agent:
+  name: personal-ingest
+  runtime: user_machine_or_dedicated_private_node
+  sync_strategy:
+    preferred: read_local_copy_of_shared_vault_synced_by_obsidian_desktop
+    alternate: obsidian_headless_on_a_separate_private_node
+    warning: do_not_run_desktop_sync_and_headless_sync_for_the_same_vault_on_the_same_device
+  permissions:
+    read:
+      - Team Sources/10_sources/**
+      - Team Sources/11_assets/**
+      - Team Sources/12_indices/**
+      - Team Sources/20_public_wiki/**
+    write:
+      - User Wiki/**
+    deny:
+      - Team Sources/**
+  invariants:
+    - never_modify_the_shared_vault
+    - keep_ingest_state_only_in_the_private_vault
+    - write_all_generated_notes_into_20_wiki_or_30_outputs
+    - carry_source_id_source_uri_shared_wiki_id_and_shared_wiki_uri_forward_into_private_notes
+
+workflow:
+  - load .agent/ingest-state.json
+  - scan Team Sources/10_sources and Team Sources/20_public_wiki for ids_and_content_hashes
+  - compute new_changed_removed diff
+  - ingest only new_or_changed shared_artifacts
+  - regenerate affected private notes
+  - write summaries_indexes_and_outputs_to_private_vault
+  - update .agent/ingest-state.json
+
+cross_vault_reference_rule:
+  preferred_link_format: obsidian_uri
+  example: obsidian://open?vault=Team%20Sources&file=10_sources%2Fproduct%2FSRC-PRD-2026-0001-roadmap-q2
+  public_wiki_example: obsidian://open?vault=Team%20Sources&file=20_public_wiki%2Fdecisions%2FGT-DEC-2026-0003-beta-scope-freeze
+
+obsidian_recommended_config:
+  shared_vault:
+    purpose: browse_and_reference_shared_sources_and_team_ground_truth
+    config_sync: false
+    heavy_plugins: discouraged
+  private_vault:
+    purpose: personal_knowledge_and_outputs
+    config_sync: true
+    file_recovery: true
+    recommended_features:
+      - Templates
+      - Properties
+      - Search
+      - Graph
+      - Backlinks
+
+definition_of_done:
+  - private_vault_exists
+  - shared_vault_is_available_locally
+  - personal_ingest_prompt_is_installed
+  - one_changed_source_or_shared_wiki_note_can_generate_or_refresh_a_private_wiki_page
+  - no_file_under_Team_Sources_is_touched_by_the_ingest_agent
