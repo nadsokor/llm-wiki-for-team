@@ -1,0 +1,105 @@
+role: admin
+objective: >
+  Deploy and operate the shared Team Sources vault, including canonical sources,
+  the team public wiki, and the source curator agent.
+
+vaults:
+  shared_vault:
+    name: Team Sources
+    class: shared
+    required_folders:
+      - 00_inbox/product
+      - 00_inbox/research
+      - 00_inbox/meeting
+      - 00_inbox/misc
+      - 10_sources/product
+      - 10_sources/engineering
+      - 10_sources/research
+      - 10_sources/process
+      - 11_assets
+      - 12_indices
+      - 20_public_wiki/decisions
+      - 20_public_wiki/concepts
+      - 20_public_wiki/glossary
+      - 20_public_wiki/maps
+      - 90_governance
+    machine_readable_outputs:
+      - 12_indices/source-registry.jsonl
+      - 12_indices/public-wiki-registry.jsonl
+    governance_files:
+      - 90_governance/source-template.md
+      - 90_governance/public-wiki-template.md
+      - 90_governance/category-rules.md
+      - 90_governance/naming-rules.md
+
+agent:
+  name: source-curator
+  runtime: dedicated_machine_or_server
+  sync_strategy:
+    preferred: obsidian_headless_on_dedicated_node
+    warning: do_not_run_desktop_sync_and_headless_sync_for_the_same_vault_on_the_same_device
+  tools:
+    preferred:
+      - MarkItDown
+      - OCR_if_needed
+      - Pandoc_as_fallback
+  permissions:
+    read:
+      - 00_inbox/**
+      - 10_sources/**
+      - 11_assets/**
+      - 12_indices/**
+      - 20_public_wiki/**
+      - 90_governance/**
+    write:
+      - 10_sources/**
+      - 11_assets/**
+      - 12_indices/**
+      - 20_public_wiki/**
+    deny:
+      - any_private_user_vault
+  invariants:
+    - only_canonical_markdown_lives_in_10_sources
+    - only_team_ground_truth_notes_live_in_20_public_wiki
+    - attachments_for_a_source_live_under_11_assets/<source_id>/
+    - every_canonical_source_has_source_id_and_content_hash
+    - every_public_wiki_note_has_shared_wiki_id_and_source_links
+    - source_registry_is_updated_after_each_successful_ingest
+    - public_wiki_registry_is_updated_after_each_successful_ground_truth_update
+
+workflow:
+  - scan 00_inbox for new_or_changed_files
+  - fingerprint each candidate using path_size_mtime_and_content_hash
+  - convert to markdown
+  - extract or preserve attachments
+  - classify into canonical folder
+  - assign source_id
+  - write canonical markdown to 10_sources
+  - write attachments to 11_assets/<source_id>/
+  - extract explicit decisions concepts and stable terminology where evidence is strong
+  - upsert shared public wiki notes into 20_public_wiki
+  - upsert record into 12_indices/source-registry.jsonl
+  - upsert record into 12_indices/public-wiki-registry.jsonl
+  - mark original_as_processed_or_move_to_archived_inbox_if_policy_exists
+
+obsidian_recommended_config:
+  sync:
+    notes: true
+    images: true
+    pdfs: true
+    unsupported_files: true
+    config_sync: false
+  usage:
+    human_writes_allowed_only_in:
+      - 00_inbox/**
+      - 20_public_wiki/** only_for_designated_shared_knowledge_maintainers
+    canonical_writes_owned_by:
+      - source-curator
+
+definition_of_done:
+  - shared_vault_exists_and_is_invitable
+  - folder_structure_exists
+  - source_curator_prompt_is_installed
+  - at_least_one_test_document_can_flow_from_00_inbox_to_10_sources
+  - at_least_one_test_document_can_generate_or_update_a_public_wiki_note
+  - extracted_images_or_attachments_remain_openable_from_canonical_markdown
