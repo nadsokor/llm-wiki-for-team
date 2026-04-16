@@ -1,0 +1,6 @@
+.DS_Store
+.venv-admin/
+__pycache__/
+*.pyc
+runtime/admin-curator/logs/
+admin/Team Sources/.obsidian/
